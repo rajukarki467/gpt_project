@@ -1,0 +1,63 @@
+# ---------------- Python ----------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# ---------------- Virtual environments ----------------
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# ---------------- PyTorch / Training ----------------
+outputs/
+!outputs/.gitkeep
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+runs/
+wandb/
+lightning_logs/
+
+# ---------------- Data (large files) ----------------
+data/
+!data/.gitkeep
+*.txt
+*.csv
+*.jsonl
+!requirements.txt
+
+# ---------------- Jupyter ----------------
+.ipynb_checkpoints/
+
+# ---------------- IDE / Editor ----------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ---------------- OS ----------------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------------- Testing / Coverage ----------------
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# ---------------- Environment variables ----------------
+.env
+.env.*
+!.env.example
