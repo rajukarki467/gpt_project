@@ -1,7 +1,5 @@
 # Autoregressive Generation
-# This supports greedy, temperature, and top-k sampling.
-
-
+# Supports greedy, temperature, and top-k sampling.
 
 import os
 import sys
@@ -13,27 +11,45 @@ from src.model import GPT
 
 
 def load_model(ckpt_path, device):
-    """Load a checkpoint and rebuild the model + tokenizer."""
-    ckpt = torch.load(ckpt_path, map_location=device)
-    cfg_dict = ckpt["cfg"]
+    """Load a checkpoint and rebuild the model + tokenizer.
 
-    # Rebuild a Config instance from the saved dict
-    class _C: pass
-    cfg = _C()
+    Tolerant of old checkpoints whose saved cfg dict may be empty or incomplete —
+    in that case we fall back to values defined in config.py.
+    """
+    ckpt = torch.load(ckpt_path, map_location=device)
+    cfg_dict = ckpt.get("cfg", {}) or {}
+
+    # Start from a fresh Config (guaranteed to have all needed attributes),
+    # then let any saved values overwrite the defaults.
+    cfg = Config()
     for k, v in cfg_dict.items():
         setattr(cfg, k, v)
+
+    # Attach runtime device (not stored in the checkpoint)
     cfg.device = device
+
+    # Sanity check — fail loudly if something is missing
+    required = ("n_embd", "n_layer", "n_head", "block_size", "dropout", "bias", "device")
+    missing = [k for k in required if not hasattr(cfg, k)]
+    if missing:
+        raise RuntimeError(
+            f"Config is missing required attributes: {missing}. "
+            f"Checkpoint cfg keys: {list(cfg_dict.keys())}"
+        )
 
     model = GPT(cfg, vocab_size=len(ckpt["stoi"])).to(device)
     model.load_state_dict(ckpt["model"])
     model.eval()
 
-    # Return (model, cfg, stoi, itos)
     return model, cfg, ckpt["stoi"], ckpt["itos"]
 
 
-def encode(s, stoi): return [stoi[c] for c in s if c in stoi]
-def decode(ids, itos): return "".join(itos[i] for i in ids)
+def encode(s, stoi):
+    return [stoi[c] for c in s if c in stoi]
+
+
+def decode(ids, itos):
+    return "".join(itos[i] for i in ids)
 
 
 def generate_text(
@@ -47,11 +63,14 @@ def generate_text(
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model, cfg, stoi, itos = load_model(ckpt_path, device)
 
-    # Encode prompt -> tensor
+    # Encode prompt -> tensor (B=1, T=len(prompt))
     ids = encode(prompt, stoi)
+    if len(ids) == 0:
+        # Fallback: if prompt had no known chars, start from a newline
+        ids = encode("\n", stoi)
     idx = torch.tensor([ids], dtype=torch.long, device=device)
 
-    # Greedy: use temperature very low to make argmax dominant
+    # Greedy: essentially argmax via near-zero temperature
     if greedy:
         temperature = 1e-6
 
@@ -63,7 +82,7 @@ def generate_text(
             top_k=top_k,
         )
 
-    # Decode and return only the newly generated portion
+    # Decode the full sequence (prompt + generated)
     text = decode(out[0].tolist(), itos)
     return text
 

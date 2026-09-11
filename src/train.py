@@ -1,9 +1,11 @@
-#  Training Loop with AMP
-# This is where mixed-precision and scheduler stepping come together
+# Training Loop with AMP
+# This is where mixed-precision and scheduler stepping come together.
+
 import os
 import sys
 import math
 import time
+import json
 
 # Allow imports from project root
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -47,8 +49,10 @@ def train():
 
     # ---------- Data ----------
     train_ds, val_ds, tokenizer = build_datasets(cfg)
-    train_loader = DataLoader(train_ds, batch_size=cfg.batch_size, shuffle=True, num_workers=2, pin_memory=True)
-    val_loader   = DataLoader(val_ds,   batch_size=cfg.batch_size, shuffle=False, num_workers=2, pin_memory=True)
+    train_loader = DataLoader(train_ds, batch_size=cfg.batch_size, shuffle=True,
+                              num_workers=2, pin_memory=True)
+    val_loader   = DataLoader(val_ds,   batch_size=cfg.batch_size, shuffle=False,
+                              num_workers=2, pin_memory=True)
     print(f"vocab size: {tokenizer.vocab_size}")
 
     # ---------- Model ----------
@@ -63,6 +67,20 @@ def train():
     # bf16 doesn't need a GradScaler; fp16 does.
     use_scaler = (cfg.dtype == "float16")
     scaler = torch.cuda.amp.GradScaler(enabled=use_scaler)
+
+    # ---------- Training Log (for plotting later) ----------
+    # We log two streams:
+    #   - every step: (iter, train loss, lr)
+    #   - every eval interval: (iter, val loss)
+    # Two separate lists because eval happens less often than training steps.
+    training_log = {
+        "train_iters":   [],
+        "train_loss":    [],
+        "train_lr":      [],
+        "val_iters":     [],
+        "val_loss":      [],
+        "best_val_loss": None,
+    }
 
     # ---------- Training ----------
     best_val = float("inf")
@@ -104,26 +122,64 @@ def train():
             scaler.update()
             optimizer.zero_grad(set_to_none=True)
 
+        # Log the training step (unscaled loss for readability)
+        training_log["train_iters"].append(iter_num + 1)
+        training_log["train_loss"].append(loss.item() * cfg.grad_accum)
+        training_log["train_lr"].append(lr)
+
         pbar.set_postfix(loss=f"{loss.item()*cfg.grad_accum:.4f}", lr=f"{lr:.2e}")
 
         # 5) Periodic evaluation
         if (iter_num + 1) % cfg.eval_interval == 0 or iter_num == cfg.max_iters - 1:
             val_loss = evaluate(model, val_loader, cfg)
-            print(f"\n[iter {iter_num+1}] train loss {loss.item()*cfg.grad_accum:.4f} | val loss {val_loss:.4f} | "
-                  f"lr {lr:.2e} | elapsed {(time.time()-t0)/60:.2f} min")
+            print(f"\n[iter {iter_num+1}] train loss {loss.item()*cfg.grad_accum:.4f} | "
+                  f"val loss {val_loss:.4f} | lr {lr:.2e} | "
+                  f"elapsed {(time.time()-t0)/60:.2f} min")
+
+            # Log the eval point
+            training_log["val_iters"].append(iter_num + 1)
+            training_log["val_loss"].append(val_loss)
 
             # Save checkpoint if best
             if val_loss < best_val:
                 best_val = val_loss
+                training_log["best_val_loss"] = val_loss
+
+                # Build a full config dict combining class-level and instance-level attrs.
+                # Handles both styles of defining Config (class attrs vs __init__ attrs).
+                cfg_dict = {}
+                for k in dir(cfg):
+                    if k.startswith("_"):
+                        continue
+                    try:
+                        v = getattr(cfg, k)
+                    except AttributeError:
+                        continue
+                    if callable(v):
+                        continue
+                    # Only keep primitives / plain values (skip modules, tensors, etc.)
+                    if isinstance(v, (int, float, str, bool, type(None))):
+                        cfg_dict[k] = v
+
                 ckpt = {
                     "model": model.state_dict(),
-                    "cfg": cfg.__dict__,
+                    "cfg": cfg_dict,
                     "iter": iter_num,
                     "val_loss": val_loss,
                     "stoi": tokenizer.stoi,
                     "itos": tokenizer.itos,
                 }
                 torch.save(ckpt, "outputs/checkpoints/best.pt")
+                print(f"  → saved checkpoint (val_loss={val_loss:.4f}, "
+                      f"cfg keys={len(cfg_dict)})")
+
+            # Save training log after every eval (so a crash doesn't lose data)
+            with open("outputs/checkpoints/training_log.json", "w") as f:
+                json.dump(training_log, f, indent=2)
+
+    # Final save after training completes
+    with open("outputs/checkpoints/training_log.json", "w") as f:
+        json.dump(training_log, f, indent=2)
 
     print("Training complete. Best val loss:", best_val)
 
