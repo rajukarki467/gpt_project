@@ -1,0 +1,69 @@
+\section{Experimental Setup}
+\label{sec:setup}
+
+\subsection{Dataset}
+The model is trained on the \textbf{Tiny Shakespeare} corpus, a 
+character-level dataset of approximately $1.1$ million characters derived 
+from Shakespeare's plays. The vocabulary consists of the $65$ unique 
+characters found in the corpus. Sequences are tokenised at the character 
+level, and consecutive non-overlapping chunks of length $T = 128$ are used 
+as training examples.
+
+\subsection{Model Configuration}
+\begin{table}[H]
+\centering
+\caption{Model hyperparameters for the decoder-only Transformer.}
+\label{tab:model}
+\begin{tabular}{ll}
+\toprule
+\textbf{Parameter} & \textbf{Value} \\
+\midrule
+Vocabulary size $V$        & 65 \\
+Embedding dimension $d$    & 256 \\
+Number of heads $h$        & 8 \\
+Head dimension $d_h$       & 32 \\
+Number of layers $N$       & 6 \\
+Context length $T$         & 128 \\
+FFN hidden size            & $4d = 1024$ \\
+Activation                 & GELU \\
+Normalisation              & Pre-LayerNorm \\
+Dropout                    & 0.1 \\
+Weight tying               & Yes (LM head $\leftrightarrow$ token emb.) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Training Configuration}
+\begin{table}[H]
+\centering
+\caption{Training hyperparameters.}
+\label{tab:train}
+\begin{tabular}{ll}
+\toprule
+\textbf{Parameter} & \textbf{Value} \\
+\midrule
+Optimiser                  & AdamW ($\beta_1 = 0.9$, $\beta_2 = 0.95$) \\
+Peak learning rate $\eta_{\max}$ & $3 \times 10^{-4}$ \\
+Minimum learning rate $\eta_{\min}$ & $1 \times 10^{-5}$ \\
+Weight decay $\lambda$     & $0.1$ (2D weights only) \\
+Warmup steps $T_w$         & 200 \\
+Total steps $T$            & 5000 \\
+Batch size                 & 32 \\
+Gradient clipping          & $\|g\|_2 \leq 1.0$ \\
+Precision                  & bf16 mixed precision \\
+Hardware                   & NVIDIA T4 GPU (Google Colab) \\
+Framework                  & PyTorch 2.1 + CUDA 12.1 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Evaluation Protocol}
+We evaluate the model using three complementary measures:
+\begin{itemize}
+    \item \textbf{Training and validation loss}: cross-entropy per token, 
+          used to monitor overfitting and convergence.
+    \item \textbf{Perplexity}: $\exp(\mathcal{L})$, an interpretable 
+          measure of predictive uncertainty.
+    \item \textbf{Qualitative samples}: generated text under different 
+          decoding strategies (greedy, temperature, top-$k$).
+\end{itemize}
