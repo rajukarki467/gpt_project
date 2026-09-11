@@ -1,0 +1,83 @@
+======================================================================
+Sampling: greedy
+======================================================================
+ROMEO: the shall shall be the stand of the stand
+The shall be the some of the some of the son,
+And the shall be the shall of the shall be the sent
+That the shall of the shall be the soul of the soul,
+And the shall be the shall of the shall be the sent
+That the shall of the shall be the soul of the soul,
+And the shall be the shall of the shall be the sent
+That the shall of the shall be the soul of the sou
+
+======================================================================
+Sampling: temperature_0.5
+======================================================================
+ROMEO: as the grace strait not the see
+I prove the present that when he fair the face.
+
+JULIET:
+Why, that I shall you are a come to this done,
+But the be shall proud that which in such our of my death,
+And the have the heaven of of Marcius, and so serve
+That I have to shall have her hath been the death,
+Richard the persent that be at his stain stand as he shall
+When the death.
+
+CORIOLANUS:
+The was all a 
+
+======================================================================
+Sampling: temperature_0.8_k40
+======================================================================
+ROMEO: pray of the think
+With throw there the shall dights in to her Montuce,
+Though the shame so way is a cortent,
+And merely to from us as on thither in love!
+How shall not love, and of my littled back.
+But to my the hope.
+
+CAMILLO:
+Not, pardon be your misify for take
+Not fright! how thou that lave the thy heart,
+And here's maid that thee pult of the sumpose;
+So all; the how worthy may fault more goods
+
+======================================================================
+Sampling: temperature_1.0
+======================================================================
+ROMEO: our all! O, lady it will weder an but
+Lord arm for my hart defect to of more.
+What we every boy's a mostarnning sheks, flow.
+
+CLOUCESS:
+He prance still of Marcius, 'Tis if a horstre!
+Such in the hois did that trughter to down, you towo speak,
+And men his lather.
+
+DUKE VINFORD:
+Presune?
+
+COMIOLANUS:
+How the tell but me death, beackings
+Ensur where I would with sain. Mastersuand sweeth,
+To you hast 
+
+======================================================================
+Sampling: temperature_1.5
+======================================================================
+ROMEO: Work fevife,-thou ho!
+
+Erson:
+I will misables. O kinlam unpstempt--ib, hisir; a he
+cleasty by turrewards. Hereforw, swe':
+I ex hall I pritcience,
+We now, and I spay speak hagonsue
+Don Iven the mercuiides: orse, but peyseved? their lable;
+An MarJulned. You Break us.
+Let yours touBadin am me,
+It thy lord, no greept wrong kidllius
+And atthe; ranD, who
+follurs his recurds your tonaint annd thee.
+Keep 
+

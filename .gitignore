@@ -16,27 +16,44 @@ env/
 ENV/
 .python-version
 
-# ---------------- PyTorch / Training ----------------
-outputs/
-!outputs/.gitkeep
+# ---------------- PyTorch / Training artifacts ----------------
+# Model weights and checkpoint files
 *.pt
 *.pth
 *.ckpt
 *.safetensors
+
+# Training logs (keep if you want them in the repo; ignore if you'd rather regenerate)
+# outputs/checkpoints/training_log.json
+
+# Generated figures (regenerate with src/visualize.py)
+# Uncomment the next line if you don't want plots in git
+# outputs/samples/
+
+# Keep folder placeholders
+!outputs/.gitkeep
+!outputs/checkpoints/.gitkeep
+!outputs/samples/.gitkeep
+
+# W&B / TensorBoard / lightning
 runs/
 wandb/
 lightning_logs/
+events.out.tfevents.*
 
-# ---------------- Data (large files) ----------------
+# ---------------- Data (large / downloaded) ----------------
 data/
 !data/.gitkeep
-*.txt
 *.csv
 *.jsonl
-!requirements.txt
+*.parquet
+
+# NOTE: Do NOT ignore *.txt globally — that would block requirements.txt
+# and any small text samples you want to commit.
 
 # ---------------- Jupyter ----------------
 .ipynb_checkpoints/
+*.ipynb_checkpoints
 
 # ---------------- IDE / Editor ----------------
 .vscode/
@@ -50,7 +67,7 @@ data/
 Thumbs.db
 desktop.ini
 
-# ---------------- Testing / Coverage ----------------
+# ---------------- Testing / Coverage / Lint ----------------
 .pytest_cache/
 .coverage
 htmlcov/

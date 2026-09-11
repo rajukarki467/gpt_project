@@ -1,8 +1,34 @@
 # MiniGPT: A Decoder-Only Transformer From Scratch
 
-I built this to properly understand how GPT-style language models actually work under the hood. Instead of importing `nn.TransformerDecoder` and calling it a day, everything here — causal attention, the Transformer block, weight tying, the training loop — is written from PyTorch primitives. It's a small model (~0.8M params) trained on Tiny Shakespeare, and it runs in a few minutes on a CPU or seconds on a GPU.
+I built this to properly understand how GPT-style language models work under the hood. Instead of importing `nn.TransformerDecoder` and calling it a day, everything here — causal attention, the Transformer block, weight tying, the training loop — is written from PyTorch primitives. It's a small model (**0.82 M parameters**) trained on Tiny Shakespeare, and it finishes 5000 training steps in **under 4 minutes** on a laptop GPU.
 
 The goal wasn't to produce state-of-the-art text. It was to make every line of the forward pass explainable.
+
+---
+
+## Results at a glance
+
+| Metric | Value |
+|---|---|
+| Model parameters | 0.82 M |
+| Training steps | 5000 |
+| Final train loss | **1.613** |
+| Final val loss | **1.545** |
+| Final val perplexity | **≈ 4.69** |
+| Wall-clock time | **3.83 min** |
+| Throughput | **~28 it/s** (steady state) |
+| Best checkpoint | `outputs/checkpoints/best.pt` |
+
+Sample output after 5000 steps:
+
+```
+ROMEO: be more my fear.
+
+BUCKINGHAM:
+What, I beter the maid me, lord be the sold me
+Besole reigness me with do of the did soul. Welcand you not
+that I love not so weep even that I with intersise.
+```
 
 ---
 
@@ -13,8 +39,9 @@ The goal wasn't to produce state-of-the-art text. It was to make every line of t
 - **Learned token + positional embeddings**, with weight tying between the embedding and LM head
 - **Mixed-precision training** using `torch.autocast` and `GradScaler`
 - **Linear warmup + cosine decay** learning-rate schedule
-- **AdamW** with weight decay applied *only* to 2D parameters (biases and LayerNorm gains are excluded)
+- **AdamW** with weight decay applied *only* to 2D parameters (18 decay / 34 no-decay tensors)
 - **Three sampling modes** for generation: greedy, temperature, and top-k
+- **Diagnostic visualisations**: loss curve, LR curve, attention heatmap
 
 ---
 
@@ -28,9 +55,23 @@ gpt_project/
 ├── .gitignore
 │
 ├── data/                  # Tiny Shakespeare lands here on first run
+│   └── input.txt
 │
-├── outputs/               # checkpoints and sample generations
-│   └── checkpoints/
+├── outputs/
+│   ├── checkpoints/
+│   │   ├── best.pt              # final model weights
+│   │   └── training_log.json    # per-step loss + LR history
+│   └── samples/
+│       ├── all_samples.txt
+│       ├── attention_heatmap.png
+│       ├── loss_curve.png
+│       ├── lr_schedule.png
+│       ├── lr_used.png
+│       ├── sample_greedy.txt
+│       ├── sample_temperature_0.5.txt
+│       ├── sample_temperature_0.8_k40.txt
+│       ├── sample_temperature_1.0.txt
+│       └── sample_temperature_1.5.txt
 │
 └── src/
     ├── dataset.py         # char-level tokenizer + LM dataset
@@ -38,15 +79,14 @@ gpt_project/
     ├── loss.py            # cross-entropy wrapper
     ├── optimizer.py       # AdamW param grouping
     ├── scheduler.py       # warmup + cosine
-    ├── train.py           # training loop
-    └── generate.py        # sampling
+    ├── train.py           # training loop with AMP + logging
+    ├── generate.py        # sampling (greedy / temperature / top-k)
+    └── visualize.py       # loss curve, LR curve, attention map, samples
 ```
 
 ---
 
 ## Getting it running
-
-Grab the code and set up a virtual environment:
 
 ```bash
 git clone <your-repo-url>
@@ -56,23 +96,29 @@ source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-Then train:
+Train the model:
 
 ```bash
 python src/train.py
 ```
 
-The Tiny Shakespeare corpus (~1.1 MB) downloads itself on the first run. Training defaults to 5,000 iterations with a batch size of 64 and a context length of 128 tokens. On a mid-range GPU it takes about 3–5 minutes. On CPU, expect closer to 30–45 minutes.
+The Tiny Shakespeare corpus (~1.1 MB) downloads itself on the first run. With the default config (5000 steps, batch size 64, context length 128), a modern GPU finishes in **~4 minutes**.
 
-You'll see a progress bar tracking loss and learning rate. If things are healthy, the loss starts around 4.17 (that's `ln(65)`, the entropy of a uniform distribution over the character vocabulary) and drops below 1.6 by the end.
-
-To sample from the trained model:
+Generate samples:
 
 ```bash
 python src/generate.py
 ```
 
-That runs three generations in sequence — greedy, temperature-with-top-k, and high-temperature — so you can compare how the different sampling strategies behave.
+This runs greedy, temperature-0.8-with-top-k-40, and high-temperature sampling from the same prompt so you can compare them side by side.
+
+Produce all report figures:
+
+```bash
+python src/visualize.py
+```
+
+This writes the loss curve, LR curve, attention heatmap, and all sample `.txt` files into `outputs/samples/`.
 
 ---
 
@@ -87,9 +133,10 @@ The defaults are deliberately tiny so the whole thing is debuggable:
 | Embedding dim | 128 |
 | Context length | 128 |
 | Dropout | 0.1 |
-| Parameters | ~0.8 M |
+| FFN hidden size | 4 × 128 = 512 |
+| Parameters | ~0.82 M |
 
-If you want a slightly more capable model, bump `n_layer` to 6 and `n_embd` to 256 in `config.py`. You'll get noticeably better output at the cost of speed.
+If you want a more capable model, bump `n_layer` to 6 and `n_embd` to 256 in `config.py`. You'll get noticeably better output at the cost of speed.
 
 ### Attention
 
@@ -133,26 +180,58 @@ A few decisions worth calling out, since they're the ones that actually mattered
 
 **Learning rate schedule.** Linear warmup for the first 200 steps, then cosine decay down to a floor of `3e-5`. The warmup exists because early gradients on a randomly-initialized Transformer are large and noisy — jumping straight to peak LR tends to destabilize the run.
 
-**Weight decay grouping.** Only tensors with `dim() >= 2` get weight decay. Biases, LayerNorm gains, and embedding tables are excluded. This matches what GPT-3 and most modern recipes do; decaying a LayerNorm gain toward zero is not something you actually want.
+**Weight decay grouping.** Only tensors with `dim() >= 2` get weight decay. Biases, LayerNorm gains, and embedding tables are excluded. In this run, **18 tensors received weight decay and 34 did not**. This matches the GPT-3 recipe; decaying a LayerNorm gain toward zero is not something you actually want.
 
 **Mixed precision.** `bfloat16` when the GPU supports it (no scaler needed), otherwise `float16` with a `GradScaler`. The autocast context wraps only the forward pass and loss — the backward pass runs in the scaled dtype automatically.
 
 **Gradient clipping.** Global norm clipped to 1.0 every step. It's a cheap safety net against the occasional loss spike.
 
+**Logging.** The training loop writes `outputs/checkpoints/training_log.json` after every evaluation, containing per-step train loss, LR, and per-eval validation loss. This makes it possible to redraw the loss curve at any time without retraining.
+
 ---
 
 ## What the output looks like
 
-After 5,000 iterations on Tiny Shakespeare, the model produces text that's character-valid and locally coherent. It won't fool anyone, but it gets the rhythm right:
+The five sampling strategies, on the same prompt, tell a very clear story about the coherence–diversity trade-off:
+
+**Greedy** — collapses into loops within 15 tokens:
 
 ```
-ROMEO:
-What says my love? I have not seen him so,
-For I have been so much of his company,
-And yet I know not what to say to him.
+ROMEO: the shall shall be the stand of the stand
+The shall be the some of the some of the son,
+And the shall be the shall of the shall be the sent
 ```
 
-Greedy decoding tends to get stuck in loops. Temperature around 0.8 with top-k of 40 is the sweet spot — diverse enough to avoid repetition, focused enough to stay grammatical. Above 1.2 the model starts inventing words.
+**Temperature 0.8, top-k 40** — the sweet spot:
+
+```
+ROMEO: her, that no shall the hast bidgoth,
+Show from and since and her stand truth
+Than should to king from Patcive.
+
+PAULINA:
+Thou hast love merry me well the worthy own of must
+```
+
+**Temperature 1.5** — creative but incoherent:
+
+```
+ROMEO: 'TOnpe shall thou god my fnighthting, not,
+Comentent,d, Larlen i now-cae hecce.
+```
+
+Full side-by-side comparison in `outputs/samples/all_samples.txt`.
+
+---
+
+## Diagnostic figures
+
+All figures are generated by `python src/visualize.py`:
+
+- **`loss_curve.png`** — training (per-step, faded) + validation (per-eval, bold)
+- **`lr_used.png`** — the actual learning rate used at each step
+- **`lr_schedule.png`** — the idealized schedule (useful for the report's methods section)
+- **`attention_heatmap.png`** — attention weights from all heads of the first block, for the prompt `"ROMEO: "`. Shows strictly lower-triangular structure, confirming the causal mask.
 
 ---
 
@@ -165,6 +244,7 @@ Greedy decoding tends to get stuck in loops. Temperature around 0.8 with top-k o
 | Loss stuck near 4.17 | Tokenizer isn't seeing data, or LR is far too low |
 | `mat1 and mat2 shapes cannot be multiplied` | `n_embd` not divisible by `n_head` |
 | CUDA driver warning on import | Your NVIDIA driver is older than your PyTorch build; run on CPU or update the driver |
+| `KeyError: 'iters'` in `visualize.py` | Old checkpoint. Retrain with the updated `train.py` to produce `training_log.json` |
 
 ---
 
