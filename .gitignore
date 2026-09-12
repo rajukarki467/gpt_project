@@ -78,3 +78,7 @@ htmlcov/
 .env
 .env.*
 !.env.example
+
+
+report/*
+!report/main.pdf
